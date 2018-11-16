@@ -60,12 +60,34 @@ class SeBinding(models.AbstractModel):
             mapper = work.component(usage='se.export.mapper')
             lang = work.index.lang_id.code
             for record in work.records.with_context(lang=lang):
-                data = mapper.map_record(record).values()
+                values = record._get_values_recompute_json(
+                    mapper, force_export=force_export)
+                data = values.get('data')
+                # Better to understand with 2 IF
                 if record.data != data or force_export:
-                    vals = {'data': data}
                     if record.sync_state in ('done', 'new'):
-                        vals['sync_state'] = 'to_update'
-                    record.write(vals)
+                        values.update({
+                            'sync_state': 'to_update',
+                        })
+                if values:
+                    record.write(values)
+
+    @api.multi
+    def _get_values_recompute_json(self, mapper, force_export=False):
+        """
+        Get values for current recordset during recompute_json
+        :param mapper: export mapper
+        :param force_export: bool
+        :return: dict
+        """
+        self.ensure_one()
+        data = mapper.map_record(self).values()
+        vals = {}
+        if self.data != data or force_export:
+            vals.update({
+                'data': data,
+            })
+        return vals
 
     @job(default_channel='root.search_engine')
     @api.multi
